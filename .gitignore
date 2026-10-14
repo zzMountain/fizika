@@ -1,0 +1,12 @@
+/*
+!/Assets/
+!/Packages/
+!/ProjectSettings/
+!/.gitignore
+
+/Assets/TutorialInfo/
+/Assets/TutorialInfo.meta
+/Assets/[Rr]eadme*
+/Assets/Scenes/SampleScene.unity
+/Assets/Scenes/SampleScene.unity.meta
+**/[Rr][Ee][Aa][Dd][Mm][Ee]*
