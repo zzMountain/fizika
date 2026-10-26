@@ -3,25 +3,52 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody), typeof(HingeJoint))]
 public class Swing : MonoBehaviour
 {
+    [SerializeField] private CommandInput _input;
     [SerializeField, Min(0f)] private float _pushImpulse = 24f;
     [SerializeField, Min(0f)] private float _maximumAngularSpeed = 2.2f;
 
     private Rigidbody _body;
+    private bool _pushRequested;
 
     private void Awake()
     {
         _body = GetComponent<Rigidbody>();
     }
 
-    public void Push()
+    private void OnEnable()
     {
-        Vector3 axis = transform.right;
-        float speed = Vector3.Dot(_body.angularVelocity, axis);
+        _input.Requested += OnPushRequested;
+    }
 
-        if (Mathf.Abs(speed) >= _maximumAngularSpeed)
+    private void OnDisable()
+    {
+        _input.Requested -= OnPushRequested;
+        _pushRequested = false;
+    }
+
+    private void FixedUpdate()
+    {
+        if (_pushRequested == false)
             return;
 
-        float direction = speed < 0f ? -1f : 1f;
+        _pushRequested = false;
+        Push();
+    }
+
+    private void OnPushRequested()
+    {
+        _pushRequested = true;
+    }
+
+    private void Push()
+    {
+        Vector3 axis = transform.right;
+        float angularSpeedAlongAxis = Vector3.Dot(_body.angularVelocity, axis);
+
+        if (Mathf.Abs(angularSpeedAlongAxis) >= _maximumAngularSpeed)
+            return;
+
+        float direction = angularSpeedAlongAxis < 0f ? -1f : 1f;
         _body.AddTorque(axis * (_pushImpulse * direction), ForceMode.Impulse);
     }
 }

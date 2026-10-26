@@ -1,85 +1,90 @@
+using System.Collections;
 using UnityEngine;
 
-[RequireComponent(typeof(Rigidbody), typeof(HingeJoint), typeof(SpringJoint))]
+[RequireComponent(typeof(Rigidbody), typeof(SpringJoint))]
 public class Catapult : MonoBehaviour
 {
+    private readonly WaitForFixedUpdate _physicsStep = new WaitForFixedUpdate();
+
+    [SerializeField] private CommandInput _fireInput;
+    [SerializeField] private CommandInput _reloadInput;
     [SerializeField] private ProjectileLoader _loader;
-    [SerializeField, Min(0f)] private float _launchSpring = 120f;
-    [SerializeField, Min(0f)] private float _launchDamper = 8f;
-    [SerializeField, Min(0f)] private float _launchDistance = 0.1f;
-    [SerializeField, Min(0f)] private float _relaxedDistance = 20f;
-    [SerializeField, Min(0f)] private float _returnSpeed = 80f;
-    [SerializeField, Min(0f)] private float _returnForce = 1800f;
+    [SerializeField, Range(0f, 90f)] private float _launchAngle = 65f;
     [SerializeField, Min(0f)] private float _restAngleTolerance = 1f;
-    [SerializeField, Min(0f)] private float _restSpeedTolerance = 0.15f;
+    [SerializeField, Min(0f)] private float _restAngularSpeedTolerance = 0.15f;
 
     private Rigidbody _body;
-    private HingeJoint _hinge;
     private SpringJoint _spring;
     private Quaternion _restRotation;
+    private Vector3 _restAnchor;
+    private Vector3 _launchAnchor;
+    private Coroutine _reloadRoutine;
     private bool _isLoaded;
-    private bool _isReturning;
 
     private void Awake()
     {
         _body = GetComponent<Rigidbody>();
-        _hinge = GetComponent<HingeJoint>();
         _spring = GetComponent<SpringJoint>();
         _restRotation = _body.rotation;
+        _restAnchor = _spring.connectedAnchor;
+
+        Quaternion launchRotation = _restRotation * Quaternion.AngleAxis(_launchAngle, Vector3.right);
+        _launchAnchor = _body.position + launchRotation * _spring.anchor;
     }
 
-    private void Start()
+    private void OnEnable()
     {
-        _loader.Reload();
-        _isLoaded = true;
+        _fireInput.Requested += OnFireRequested;
+        _reloadInput.Requested += OnReloadRequested;
+        OnReloadRequested();
     }
 
-    private void FixedUpdate()
+    private void OnDisable()
     {
-        if (_isReturning == false)
-            return;
+        _fireInput.Requested -= OnFireRequested;
+        _reloadInput.Requested -= OnReloadRequested;
 
-        if (Quaternion.Angle(_body.rotation, _restRotation) > _restAngleTolerance)
-            return;
+        if (_reloadRoutine != null)
+        {
+            StopCoroutine(_reloadRoutine);
+            _reloadRoutine = null;
+        }
 
-        if (_body.angularVelocity.magnitude > _restSpeedTolerance)
-            return;
-
-        _hinge.useMotor = false;
-        _isReturning = false;
-        _loader.Reload();
-        _isLoaded = true;
+        _isLoaded = false;
     }
 
-    public void Fire()
+    private void OnFireRequested()
     {
-        if (_isLoaded == false || _isReturning)
+        if (_isLoaded == false)
             return;
 
         _isLoaded = false;
-        _spring.maxDistance = _launchDistance;
-        _spring.spring = _launchSpring;
-        _spring.damper = _launchDamper;
+        _spring.connectedAnchor = _launchAnchor;
         _body.WakeUp();
     }
 
-    public void Reload()
+    private void OnReloadRequested()
     {
-        if (_isReturning)
+        if (_reloadRoutine != null)
             return;
 
         _isLoaded = false;
-        _isReturning = true;
-        _spring.spring = 0f;
-        _spring.damper = 0f;
-        _spring.maxDistance = _relaxedDistance;
-
-        JointMotor motor = _hinge.motor;
-        motor.targetVelocity = -_returnSpeed;
-        motor.force = _returnForce;
-        motor.freeSpin = false;
-        _hinge.motor = motor;
-        _hinge.useMotor = true;
+        _spring.connectedAnchor = _restAnchor;
         _body.WakeUp();
+        _reloadRoutine = StartCoroutine(ReloadWhenResting());
+    }
+
+    private IEnumerator ReloadWhenResting()
+    {
+        do
+        {
+            yield return _physicsStep;
+        }
+        while (Quaternion.Angle(_body.rotation, _restRotation) > _restAngleTolerance
+            || _body.angularVelocity.magnitude > _restAngularSpeedTolerance);
+
+        _loader.Reload();
+        _isLoaded = true;
+        _reloadRoutine = null;
     }
 }
